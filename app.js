@@ -102,9 +102,6 @@ async function completeOAuthVerification() {
   try {
     const response = await fetch(`${apiBase}/verify/oauth/complete`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
         token,
         code: oauthCode,
