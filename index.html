@@ -13,22 +13,23 @@
     <meta property="og:description" content="Discordアカウントと端末情報を確認してサーバー認証を完了します。" />
     <meta name="twitter:card" content="summary" />
     <title>Discat Guard Certification</title>
-    <link rel="stylesheet" href="./styles.css?v=20260512-oauth-detail-1" />
-    <script src="./app.js?v=20260512-oauth-detail-1" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=20260512-server-simple-1" />
+    <script src="./app.js?v=20260512-server-simple-1" defer></script>
   </head>
   <body>
     <main class="verify-shell" aria-live="polite">
       <section class="verify-card" aria-labelledby="pageTitle">
-        <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="img">
-            <path d="M12 3.2 5.2 5.7v5.2c0 4.4 2.7 8.2 6.8 9.9 4.1-1.7 6.8-5.5 6.8-9.9V5.7L12 3.2Z" />
-            <path d="M9.1 12.1 11 14l4.1-4.4" />
-          </svg>
+        <div class="server-card">
+          <img class="server-icon-image" data-server-icon-image alt="" hidden />
+          <div class="server-icon-fallback" data-server-icon-fallback aria-hidden="true">?</div>
+          <div class="server-meta">
+            <span>認証先サーバー</span>
+            <strong data-server-name>読み込み中</strong>
+          </div>
         </div>
         <div class="verify-copy">
           <p class="status-label" data-status-label>認証待ち</p>
           <h1 id="pageTitle">Discat Guard 認証</h1>
-          <p class="lead">Discordアカウント認証後、この端末でサーバー認証を完了します。</p>
         </div>
 
         <div class="verification-state" data-state-panel>
@@ -40,7 +41,7 @@
           </div>
           <div>
             <h2 data-state-title>認証を開始できます</h2>
-            <p data-state-message>下のボタンからDiscord OAuth2でアカウントを確認し、IPアドレスと端末情報を保護された記録として保存します。</p>
+            <p data-state-message></p>
           </div>
         </div>
 
@@ -48,10 +49,8 @@
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M20 6 9 17l-5-5" />
           </svg>
-          <span data-button-label>Discordで認証する</span>
+          <span data-button-label>認証する</span>
         </button>
-
-        <p class="privacy-note">公開ログに生IPは表示されません。管理者はダッシュボードのIP確認から専用情報を確認できます。</p>
       </section>
     </main>
   </body>

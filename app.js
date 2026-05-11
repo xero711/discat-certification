@@ -13,6 +13,9 @@ const elements = {
   message: document.querySelector("[data-state-message]"),
   button: document.querySelector("[data-verify-button]"),
   buttonLabel: document.querySelector("[data-button-label]"),
+  serverName: document.querySelector("[data-server-name]"),
+  serverIconImage: document.querySelector("[data-server-icon-image]"),
+  serverIconFallback: document.querySelector("[data-server-icon-fallback]"),
 };
 
 const params = new URLSearchParams(window.location.search);
@@ -22,21 +25,27 @@ const token = String(params.get("token") ?? params.get("state") ?? "").trim();
 const apiBase = resolveApiBase();
 let buttonAction = startDiscordOAuth;
 
-boot();
+void boot();
 
-function boot() {
+async function boot() {
   elements.button?.addEventListener("click", () => {
     void buttonAction();
+  });
+  elements.serverIconImage?.addEventListener("error", () => {
+    elements.serverIconImage.hidden = true;
+    if (elements.serverIconFallback) {
+      elements.serverIconFallback.hidden = false;
+    }
   });
 
   if (oauthError) {
     setState({
       status: "認証キャンセル",
       title: "Discord認証が完了していません",
-      message: "Discordの認証がキャンセルされました。もう一度認証してください。",
+      message: "",
       tone: "error",
       disabled: false,
-      button: "Discordで認証する",
+      button: "認証する",
     });
     return;
   }
@@ -45,10 +54,10 @@ function boot() {
     setState({
       status: "リンクエラー",
       title: "認証リンクが不足しています",
-      message: "Discordの認証ボタンから開いた専用リンクを使用してください。",
+      message: "",
       tone: "error",
       disabled: true,
-      button: "認証できません",
+      button: "認証不可",
     });
     return;
   }
@@ -57,10 +66,27 @@ function boot() {
     setState({
       status: "設定エラー",
       title: "Guard API URLが未設定です",
-      message: "認証ページのAPI Base URL設定を確認してください。",
+      message: "",
       tone: "error",
       disabled: true,
-      button: "認証できません",
+      button: "認証不可",
+    });
+    return;
+  }
+
+  try {
+    const canContinue = await loadSessionContext();
+    if (!canContinue) {
+      return;
+    }
+  } catch (error) {
+    setState({
+      status: "認証失敗",
+      title: "認証できませんでした",
+      message: connectionErrorMessage(error),
+      tone: "error",
+      disabled: false,
+      button: "認証する",
     });
     return;
   }
@@ -93,8 +119,8 @@ function startDiscordOAuth() {
 async function completeOAuthVerification() {
   setState({
     status: "認証中",
-    title: "Discordアカウントを確認しています",
-    message: "Discordから戻ってきた認証コードを確認しています。この画面を閉じずに少しお待ちください。",
+    title: "認証中です",
+    message: "",
     disabled: true,
     button: "認証中",
   });
@@ -116,14 +142,18 @@ async function completeOAuthVerification() {
       throw new Error(verificationErrorMessage(response.status, payload));
     }
 
+    if (payload.already_verified) {
+      window.history.replaceState({}, "", currentRedirectUri());
+      showAlreadyVerified();
+      return;
+    }
+
     const duplicate = Boolean(payload.duplicate_detected);
     window.history.replaceState({}, "", currentRedirectUri());
     setState({
       status: duplicate ? "重複検知" : "認証完了",
       title: duplicate ? "認証を記録しました" : "認証が完了しました",
-      message: duplicate
-        ? "同じ端末情報の別アカウントが検出されました。管理者へ通知されます。Discordへ戻ってください。"
-        : "Discord側でロール付与を実行しました。Discordへ戻ってください。",
+      message: "",
       tone: duplicate ? "warning" : "success",
       disabled: true,
       button: "完了",
@@ -135,9 +165,63 @@ async function completeOAuthVerification() {
       message: connectionErrorMessage(error),
       tone: "error",
       disabled: false,
-      button: "Discord認証をやり直す",
+      button: "認証する",
     });
   }
+}
+
+async function loadSessionContext() {
+  const response = await fetch(`${apiBase}/verify/session?token=${encodeURIComponent(token)}`, {
+    cache: "no-store",
+    credentials: "omit",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) {
+    throw new Error(verificationErrorMessage(response.status, payload));
+  }
+  renderServer(payload.guild);
+  if (payload.already_verified) {
+    showAlreadyVerified();
+    return false;
+  }
+  return true;
+}
+
+function renderServer(guild) {
+  const name = typeof guild?.name === "string" && guild.name.trim() ? guild.name.trim() : "Unknown Server";
+  const iconUrl = typeof guild?.icon_url === "string" ? guild.icon_url : "";
+  if (elements.serverName) {
+    elements.serverName.textContent = name;
+  }
+  if (elements.serverIconFallback) {
+    elements.serverIconFallback.textContent = serverInitial(name);
+    elements.serverIconFallback.hidden = Boolean(iconUrl);
+  }
+  if (elements.serverIconImage) {
+    if (iconUrl) {
+      elements.serverIconImage.src = iconUrl;
+      elements.serverIconImage.hidden = false;
+    } else {
+      elements.serverIconImage.removeAttribute("src");
+      elements.serverIconImage.hidden = true;
+    }
+  }
+}
+
+function serverInitial(name) {
+  const normalized = String(name || "?").trim();
+  return Array.from(normalized)[0] || "?";
+}
+
+function showAlreadyVerified() {
+  setState({
+    status: "認証済み",
+    title: "既に認証済みです。",
+    message: "",
+    tone: "success",
+    disabled: true,
+    button: "完了",
+  });
 }
 
 function currentRedirectUri() {
@@ -214,7 +298,8 @@ function verificationErrorMessage(status, payload) {
   const messages = {
     invalid_token: "認証リンクが無効です。Discordからもう一度認証リンクを開いてください。",
     expired_token: "認証リンクの有効期限が切れています。Discordからもう一度認証リンクを開いてください。",
-    already_completed: "この認証リンクはすでに使用済みです。",
+    already_completed: "既に認証済みです。",
+    already_verified: "既に認証済みです。",
     missing_token: "認証トークンが送信されていません。",
     missing_code: "Discord認証コードが送信されていません。",
     invalid_redirect_uri: "Discord OAuth2のリダイレクトURIが許可されていません。",
@@ -248,7 +333,7 @@ function connectionErrorMessage(error) {
   return message;
 }
 
-function setState({ status, title, message, tone = "", disabled = false, button = "Discordで認証する" }) {
+function setState({ status, title, message, tone = "", disabled = false, button = "認証する" }) {
   if (elements.statusLabel) {
     elements.statusLabel.textContent = status;
   }
