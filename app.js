@@ -224,11 +224,15 @@ function verificationErrorMessage(status, payload) {
     discord_token_exchange_failed: "Discord OAuth2の認証コード確認に失敗しました。",
     discord_user_fetch_failed: "Discordアカウント情報を取得できませんでした。",
   };
+  const detail = typeof payload?.message === "string" ? payload.message.trim() : "";
+  if (detail && ["discord_token_exchange_failed", "discord_user_fetch_failed"].includes(error)) {
+    return `${messages[error] ?? "Discord OAuth2の処理に失敗しました。"} ${detail}`;
+  }
   if (messages[error]) {
     return messages[error];
   }
-  if (typeof payload?.message === "string" && payload.message.trim()) {
-    return payload.message;
+  if (detail) {
+    return detail;
   }
   if (status === 0) {
     return "Guard APIに接続できませんでした。API URLとCloudflare Tunnelを確認してください。";
