@@ -1,6 +1,8 @@
 "use strict";
 
 const DEFAULT_API_BASE_URL = "https://guard-api.xero-x.me";
+const DISCORD_CLIENT_ID = "1503177107910561954";
+const DISCORD_AUTHORIZE_URL = "https://discord.com/oauth2/authorize";
 const API_BASE_STORAGE_KEY = "discat_guard_certification_api_base";
 
 const elements = {
@@ -13,12 +15,31 @@ const elements = {
 };
 
 const params = new URLSearchParams(window.location.search);
-const token = String(params.get("token") ?? "").trim();
+const oauthCode = String(params.get("code") ?? "").trim();
+const oauthError = String(params.get("error") ?? "").trim();
+const token = String(params.get("token") ?? params.get("state") ?? "").trim();
 const apiBase = resolveApiBase();
+let buttonAction = startDiscordOAuth;
 
 boot();
 
 function boot() {
+  elements.button?.addEventListener("click", () => {
+    void buttonAction();
+  });
+
+  if (oauthError) {
+    setState({
+      status: "認証キャンセル",
+      title: "Discord認証が完了していません",
+      message: "Discordの認証がキャンセルされました。もう一度認証してください。",
+      tone: "error",
+      disabled: false,
+      button: "Discordで認証する",
+    });
+    return;
+  }
+
   if (!token) {
     setState({
       status: "リンクエラー",
@@ -43,28 +64,50 @@ function boot() {
     return;
   }
 
-  elements.button?.addEventListener("click", () => {
-    void completeVerification();
-  });
+  if (oauthCode) {
+    void completeOAuthVerification();
+  }
 }
 
-async function completeVerification() {
+function startDiscordOAuth() {
+  if (!token || !apiBase) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(API_BASE_STORAGE_KEY, apiBase);
+  } catch {
+    // Storage is optional.
+  }
+  const authUrl = new URL(DISCORD_AUTHORIZE_URL);
+  authUrl.search = new URLSearchParams({
+    client_id: DISCORD_CLIENT_ID,
+    redirect_uri: currentRedirectUri(),
+    response_type: "code",
+    scope: "identify",
+    state: token,
+  }).toString();
+  window.location.href = authUrl.toString();
+}
+
+async function completeOAuthVerification() {
   setState({
     status: "認証中",
-    title: "認証を処理しています",
-    message: "この画面を閉じずに少しお待ちください。",
+    title: "Discordアカウントを確認しています",
+    message: "Discordから戻ってきた認証コードを確認しています。この画面を閉じずに少しお待ちください。",
     disabled: true,
     button: "認証中",
   });
 
   try {
-    const response = await fetch(`${apiBase}/verify/complete`, {
+    const response = await fetch(`${apiBase}/verify/oauth/complete`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         token,
+        code: oauthCode,
+        redirect_uri: currentRedirectUri(),
         device: devicePayload(),
       }),
       cache: "no-store",
@@ -76,6 +119,7 @@ async function completeVerification() {
     }
 
     const duplicate = Boolean(payload.duplicate_detected);
+    window.history.replaceState({}, "", currentRedirectUri());
     setState({
       status: duplicate ? "重複検知" : "認証完了",
       title: duplicate ? "認証を記録しました" : "認証が完了しました",
@@ -93,9 +137,13 @@ async function completeVerification() {
       message: connectionErrorMessage(error),
       tone: "error",
       disabled: false,
-      button: "もう一度認証する",
+      button: "Discord認証をやり直す",
     });
   }
+}
+
+function currentRedirectUri() {
+  return `${window.location.origin}${window.location.pathname}`;
 }
 
 function resolveApiBase() {
@@ -160,6 +208,13 @@ function verificationErrorMessage(status, payload) {
     expired_token: "認証リンクの有効期限が切れています。Discordからもう一度認証リンクを開いてください。",
     already_completed: "この認証リンクはすでに使用済みです。",
     missing_token: "認証トークンが送信されていません。",
+    missing_code: "Discord認証コードが送信されていません。",
+    invalid_redirect_uri: "Discord OAuth2のリダイレクトURIが許可されていません。",
+    oauth_required: "Discord OAuth2での認証が必要です。",
+    oauth_not_configured: "Guard API側のDiscord OAuth2設定が不足しています。",
+    discord_user_mismatch: "Discordで認証したアカウントが、認証ボタンを押したアカウントと一致しません。",
+    discord_token_exchange_failed: "Discord OAuth2の認証コード確認に失敗しました。",
+    discord_user_fetch_failed: "Discordアカウント情報を取得できませんでした。",
   };
   if (messages[error]) {
     return messages[error];
@@ -175,13 +230,13 @@ function verificationErrorMessage(status, payload) {
 
 function connectionErrorMessage(error) {
   const message = error instanceof Error ? error.message : "";
-  if (!message || message === "Failed to fetch" || message.includes("NetworkError")) {
+  if (!message || message === "Failed to fetch" || message === "Load failed" || message.includes("NetworkError")) {
     return "Guard APIに接続できませんでした。API URL、Cloudflare Tunnel、CORS許可Originを確認してください。";
   }
   return message;
 }
 
-function setState({ status, title, message, tone = "", disabled = false, button = "認証する" }) {
+function setState({ status, title, message, tone = "", disabled = false, button = "Discordで認証する" }) {
   if (elements.statusLabel) {
     elements.statusLabel.textContent = status;
   }

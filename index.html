@@ -13,8 +13,8 @@
     <meta property="og:description" content="Discordアカウントと端末情報を確認してサーバー認証を完了します。" />
     <meta name="twitter:card" content="summary" />
     <title>Discat Guard Certification</title>
-    <link rel="stylesheet" href="./styles.css?v=20260511-verify-1" />
-    <script src="./app.js?v=20260511-verify-1" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=20260511-oauth-1" />
+    <script src="./app.js?v=20260511-oauth-1" defer></script>
   </head>
   <body>
     <main class="verify-shell" aria-live="polite">
@@ -28,7 +28,7 @@
         <div class="verify-copy">
           <p class="status-label" data-status-label>認証待ち</p>
           <h1 id="pageTitle">Discat Guard 認証</h1>
-          <p class="lead">Discordに戻る前に、この端末でサーバー認証を完了します。</p>
+          <p class="lead">Discordアカウント認証後、この端末でサーバー認証を完了します。</p>
         </div>
 
         <div class="verification-state" data-state-panel>
@@ -40,7 +40,7 @@
           </div>
           <div>
             <h2 data-state-title>認証を開始できます</h2>
-            <p data-state-message>下のボタンを押すと、IPアドレスと端末情報を保護された記録として保存し、Discord側でロール付与または重複検知を実行します。</p>
+            <p data-state-message>下のボタンからDiscord OAuth2でアカウントを確認し、IPアドレスと端末情報を保護された記録として保存します。</p>
           </div>
         </div>
 
@@ -48,7 +48,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M20 6 9 17l-5-5" />
           </svg>
-          <span data-button-label>認証する</span>
+          <span data-button-label>Discordで認証する</span>
         </button>
 
         <p class="privacy-note">公開ログに生IPは表示されません。管理者だけがOwner Keyで保護された画面から専用情報を確認できます。</p>
