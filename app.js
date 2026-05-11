@@ -4,6 +4,7 @@ const DEFAULT_API_BASE_URL = "https://guard-api.xero-x.me";
 const DISCORD_CLIENT_ID = "1503177107910561954";
 const DISCORD_AUTHORIZE_URL = "https://discord.com/oauth2/authorize";
 const API_BASE_STORAGE_KEY = "discat_guard_certification_api_base";
+const PRODUCTION_ORIGIN = "https://xero-x.me";
 
 const elements = {
   statusLabel: document.querySelector("[data-status-label]"),
@@ -157,6 +158,16 @@ function resolveApiBase() {
     return fromQuery;
   }
 
+  const defaultApiBase = cleanApiBase(DEFAULT_API_BASE_URL);
+  if (window.location.origin === PRODUCTION_ORIGIN) {
+    try {
+      window.localStorage.setItem(API_BASE_STORAGE_KEY, defaultApiBase);
+    } catch {
+      // Storage is optional for this public page.
+    }
+    return defaultApiBase;
+  }
+
   try {
     const stored = cleanApiBase(window.localStorage.getItem(API_BASE_STORAGE_KEY));
     if (stored) {
@@ -166,7 +177,7 @@ function resolveApiBase() {
     // Fall back to the compiled default.
   }
 
-  return cleanApiBase(DEFAULT_API_BASE_URL);
+  return defaultApiBase;
 }
 
 function cleanApiBase(value) {
@@ -231,7 +242,7 @@ function verificationErrorMessage(status, payload) {
 function connectionErrorMessage(error) {
   const message = error instanceof Error ? error.message : "";
   if (!message || message === "Failed to fetch" || message === "Load failed" || message.includes("NetworkError")) {
-    return "Guard APIに接続できませんでした。API URL、Cloudflare Tunnel、CORS許可Originを確認してください。";
+    return `Guard APIに接続できませんでした。接続先 ${apiBase} を確認してください。`;
   }
   return message;
 }
