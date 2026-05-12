@@ -21,7 +21,10 @@ const elements = {
 const params = new URLSearchParams(window.location.search);
 const oauthCode = String(params.get("code") ?? "").trim();
 const oauthError = String(params.get("error") ?? "").trim();
-const token = String(params.get("token") ?? params.get("state") ?? "").trim();
+const rawOauthState = String(params.get("state") ?? "").trim();
+const oauthState = parseOAuthState(rawOauthState);
+const token = String(params.get("token") ?? oauthState.token ?? "").trim();
+const guildId = String(params.get("guild_id") ?? oauthState.guildId ?? "").trim();
 const apiBase = resolveApiBase();
 let buttonAction = startDiscordOAuth;
 
@@ -50,18 +53,6 @@ async function boot() {
     return;
   }
 
-  if (!token) {
-    setState({
-      status: "リンクエラー",
-      title: "認証リンクが不足しています",
-      message: "",
-      tone: "error",
-      disabled: true,
-      button: "認証不可",
-    });
-    return;
-  }
-
   if (!apiBase) {
     setState({
       status: "設定エラー",
@@ -74,8 +65,20 @@ async function boot() {
     return;
   }
 
+  if (!token && !guildId) {
+    setState({
+      status: "リンクエラー",
+      title: "認証先サーバーが不足しています",
+      message: "",
+      tone: "error",
+      disabled: true,
+      button: "認証不可",
+    });
+    return;
+  }
+
   try {
-    const canContinue = await loadSessionContext();
+    const canContinue = token ? await loadSessionContext() : await loadGuildContext();
     if (!canContinue) {
       return;
     }
@@ -97,7 +100,7 @@ async function boot() {
 }
 
 function startDiscordOAuth() {
-  if (!token || !apiBase) {
+  if ((!token && !guildId) || !apiBase) {
     return;
   }
   try {
@@ -106,12 +109,13 @@ function startDiscordOAuth() {
     // Storage is optional.
   }
   const authUrl = new URL(DISCORD_AUTHORIZE_URL);
+  const state = token ? `token:${token}` : `guild:${guildId}`;
   authUrl.search = new URLSearchParams({
     client_id: DISCORD_CLIENT_ID,
     redirect_uri: currentRedirectUri(),
     response_type: "code",
     scope: "identify",
-    state: token,
+    state,
   }).toString();
   window.location.href = authUrl.toString();
 }
@@ -130,6 +134,7 @@ async function completeOAuthVerification() {
       method: "POST",
       body: JSON.stringify({
         token,
+        guild_id: guildId,
         code: oauthCode,
         redirect_uri: currentRedirectUri(),
         device: devicePayload(),
@@ -187,6 +192,19 @@ async function loadSessionContext() {
   return true;
 }
 
+async function loadGuildContext() {
+  const response = await fetch(`${apiBase}/verify/guild?guild_id=${encodeURIComponent(guildId)}`, {
+    cache: "no-store",
+    credentials: "omit",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) {
+    throw new Error(verificationErrorMessage(response.status, payload));
+  }
+  renderServer(payload.guild);
+  return true;
+}
+
 function renderServer(guild) {
   const name = typeof guild?.name === "string" && guild.name.trim() ? guild.name.trim() : "Unknown Server";
   const iconUrl = typeof guild?.icon_url === "string" ? guild.icon_url : "";
@@ -226,6 +244,17 @@ function showAlreadyVerified() {
 
 function currentRedirectUri() {
   return `${window.location.origin}${window.location.pathname}`;
+}
+
+function parseOAuthState(value) {
+  const raw = String(value ?? "").trim();
+  if (raw.startsWith("guild:")) {
+    return { guildId: raw.slice("guild:".length), token: "" };
+  }
+  if (raw.startsWith("token:")) {
+    return { guildId: "", token: raw.slice("token:".length) };
+  }
+  return { guildId: "", token: raw };
 }
 
 function resolveApiBase() {
@@ -301,10 +330,12 @@ function verificationErrorMessage(status, payload) {
     already_completed: "この認証リンクは使用済みです。Discordからもう一度認証リンクを開いてください。",
     already_verified: "既に認証済みです。",
     missing_token: "認証トークンが送信されていません。",
+    missing_guild_id: "認証先サーバーが指定されていません。",
     missing_code: "Discord認証コードが送信されていません。",
     invalid_redirect_uri: "Discord OAuth2のリダイレクトURIが許可されていません。",
     oauth_required: "Discord OAuth2での認証が必要です。",
     oauth_not_configured: "Guard API側のDiscord OAuth2設定が不足しています。",
+    verification_not_configured: "このサーバーでは認証設定がまだ完了していません。",
     discord_user_mismatch: "Discordで認証したアカウントが、認証ボタンを押したアカウントと一致しません。",
     discord_token_exchange_failed: "Discord OAuth2の認証コード確認に失敗しました。",
     discord_user_fetch_failed: "Discordアカウント情報を取得できませんでした。",
