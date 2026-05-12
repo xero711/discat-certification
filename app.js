@@ -298,7 +298,7 @@ function verificationErrorMessage(status, payload) {
   const messages = {
     invalid_token: "認証リンクが無効です。Discordからもう一度認証リンクを開いてください。",
     expired_token: "認証リンクの有効期限が切れています。Discordからもう一度認証リンクを開いてください。",
-    already_completed: "既に認証済みです。",
+    already_completed: "この認証リンクは使用済みです。Discordからもう一度認証リンクを開いてください。",
     already_verified: "既に認証済みです。",
     missing_token: "認証トークンが送信されていません。",
     missing_code: "Discord認証コードが送信されていません。",
