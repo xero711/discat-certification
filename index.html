@@ -13,8 +13,8 @@
     <meta property="og:description" content="Discordアカウントと端末情報を確認してサーバー認証を完了します。" />
     <meta name="twitter:card" content="summary" />
     <title>Discat Guard Certification</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-server-icon-1" />
-    <script src="./app.js?v=20260513-server-icon-1" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=20260513-discord-return-1" />
+    <script src="./app.js?v=20260513-discord-return-1" defer></script>
   </head>
   <body>
     <main class="verify-shell" aria-live="polite">
@@ -50,6 +50,25 @@
           </svg>
           <span data-button-label>認証する</span>
         </button>
+
+        <div class="return-actions" data-return-actions hidden>
+          <a class="return-button return-button--app" href="#" data-return-app-link>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 12h12" />
+              <path d="m11 7 5 5-5 5" />
+              <path d="M20 5v14" />
+            </svg>
+            <span>Discordアプリに戻る</span>
+          </a>
+          <a class="return-button return-button--web" href="#" target="_blank" rel="noopener" data-return-web-link>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+              <path d="M14 4h6v6" />
+              <path d="m9 15 11-11" />
+            </svg>
+            <span>ブラウザ版Discordを開く</span>
+          </a>
+        </div>
       </section>
     </main>
   </body>

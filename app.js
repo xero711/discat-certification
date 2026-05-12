@@ -5,6 +5,7 @@ const DISCORD_CLIENT_ID = "1503177107910561954";
 const DISCORD_AUTHORIZE_URL = "https://discord.com/oauth2/authorize";
 const API_BASE_STORAGE_KEY = "discat_guard_certification_api_base";
 const PRODUCTION_ORIGIN = "https://xero-x.me";
+const DISCORD_SNOWFLAKE_PATTERN = /^\d+$/;
 
 const elements = {
   statusLabel: document.querySelector("[data-status-label]"),
@@ -16,6 +17,9 @@ const elements = {
   serverName: document.querySelector("[data-server-name]"),
   serverCard: document.querySelector("[data-server-card]"),
   serverIconImage: document.querySelector("[data-server-icon-image]"),
+  returnActions: document.querySelector("[data-return-actions]"),
+  returnAppLink: document.querySelector("[data-return-app-link]"),
+  returnWebLink: document.querySelector("[data-return-web-link]"),
 };
 
 const params = new URLSearchParams(window.location.search);
@@ -26,6 +30,7 @@ const oauthState = parseOAuthState(rawOauthState);
 const token = String(params.get("token") ?? oauthState.token ?? "").trim();
 const guildId = String(params.get("guild_id") ?? oauthState.guildId ?? "").trim();
 const apiBase = resolveApiBase();
+let discordReturnTarget = buildDiscordReturnTarget(guildId);
 let buttonAction = startDiscordOAuth;
 
 void boot();
@@ -147,11 +152,12 @@ async function completeOAuthVerification() {
 
     if (payload.already_verified) {
       window.history.replaceState({}, "", currentRedirectUri());
-      showAlreadyVerified();
+      showAlreadyVerified(payload);
       return;
     }
 
     const duplicate = Boolean(payload.duplicate_detected);
+    rememberDiscordReturn(payload);
     window.history.replaceState({}, "", currentRedirectUri());
     setState({
       status: duplicate ? "重複検知" : "認証完了",
@@ -161,6 +167,7 @@ async function completeOAuthVerification() {
       disabled: true,
       button: "完了",
     });
+    showReturnActions();
   } catch (error) {
     setState({
       status: "認証失敗",
@@ -182,9 +189,10 @@ async function loadSessionContext() {
   if (!response.ok || !payload.ok) {
     throw new Error(verificationErrorMessage(response.status, payload));
   }
+  rememberDiscordReturn(payload);
   renderServer(payload.guild);
   if (payload.already_verified) {
-    showAlreadyVerified();
+    showAlreadyVerified(payload);
     return false;
   }
   return true;
@@ -199,6 +207,7 @@ async function loadGuildContext() {
   if (!response.ok || !payload.ok) {
     throw new Error(verificationErrorMessage(response.status, payload));
   }
+  rememberDiscordReturn(payload);
   renderServer(payload.guild);
   return true;
 }
@@ -224,7 +233,62 @@ function renderServer(guild) {
   }
 }
 
-function showAlreadyVerified() {
+function rememberDiscordReturn(payload = {}) {
+  const nextTarget = normalizeDiscordReturn(payload?.discord_return, payload?.guild);
+  if (nextTarget) {
+    discordReturnTarget = nextTarget;
+  }
+  return discordReturnTarget;
+}
+
+function normalizeDiscordReturn(rawTarget, guild) {
+  const fallbackGuildId = cleanSnowflake(guild?.id) || cleanSnowflake(guildId);
+  const targetGuildId = cleanSnowflake(rawTarget?.guild_id) || fallbackGuildId;
+  if (!targetGuildId) {
+    return null;
+  }
+  const targetChannelId = cleanSnowflake(rawTarget?.channel_id);
+  return buildDiscordReturnTarget(targetGuildId, targetChannelId);
+}
+
+function buildDiscordReturnTarget(targetGuildId, targetChannelId = "") {
+  const resolvedGuildId = cleanSnowflake(targetGuildId);
+  if (!resolvedGuildId) {
+    return null;
+  }
+  const resolvedChannelId = cleanSnowflake(targetChannelId);
+  const channelPath = resolvedChannelId ? `${resolvedGuildId}/${resolvedChannelId}` : resolvedGuildId;
+  return {
+    guildId: resolvedGuildId,
+    channelId: resolvedChannelId,
+    appUrl: `discord://-/channels/${channelPath}`,
+    webUrl: `https://discord.com/channels/${channelPath}`,
+  };
+}
+
+function cleanSnowflake(value) {
+  const raw = String(value ?? "").trim();
+  return DISCORD_SNOWFLAKE_PATTERN.test(raw) ? raw : "";
+}
+
+function showReturnActions() {
+  const target = discordReturnTarget;
+  if (!target || !elements.returnActions || !elements.returnAppLink || !elements.returnWebLink) {
+    return;
+  }
+  elements.returnAppLink.href = target.appUrl;
+  elements.returnWebLink.href = target.webUrl;
+  elements.returnActions.hidden = false;
+}
+
+function hideReturnActions() {
+  if (elements.returnActions) {
+    elements.returnActions.hidden = true;
+  }
+}
+
+function showAlreadyVerified(payload = {}) {
+  rememberDiscordReturn(payload);
   setState({
     status: "認証済み",
     title: "既に認証済みです。",
@@ -233,6 +297,7 @@ function showAlreadyVerified() {
     disabled: true,
     button: "完了",
   });
+  showReturnActions();
 }
 
 function currentRedirectUri() {
@@ -358,6 +423,7 @@ function connectionErrorMessage(error) {
 }
 
 function setState({ status, title, message, tone = "", disabled = false, button = "認証する" }) {
+  hideReturnActions();
   if (elements.statusLabel) {
     elements.statusLabel.textContent = status;
   }
