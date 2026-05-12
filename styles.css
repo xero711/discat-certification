@@ -83,36 +83,26 @@ svg {
 
 .server-card {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   min-width: 0;
 }
 
-.server-icon-image,
-.server-icon-fallback {
-  width: 56px;
-  height: 56px;
-  border-radius: 8px;
+.server-card[data-has-icon="true"] {
+  grid-template-columns: 56px minmax(0, 1fr);
 }
 
 .server-icon-image {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
   display: block;
   object-fit: cover;
 }
 
 .server-icon-image[hidden] {
   display: none;
-}
-
-.server-icon-fallback {
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(18, 169, 202, 0.28);
-  background: linear-gradient(135deg, rgba(18, 169, 202, 0.16), rgba(117, 245, 186, 0.18));
-  color: var(--accent-strong);
-  font-size: 1.35rem;
-  font-weight: 950;
 }
 
 .server-meta {
@@ -125,13 +115,16 @@ svg {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .server-meta strong {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
   color: var(--text);
   font-size: 1.15rem;
   font-weight: 950;
+  line-height: 1.25;
 }
 
 .status-label {

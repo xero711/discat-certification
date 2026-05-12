@@ -14,8 +14,8 @@ const elements = {
   button: document.querySelector("[data-verify-button]"),
   buttonLabel: document.querySelector("[data-button-label]"),
   serverName: document.querySelector("[data-server-name]"),
+  serverCard: document.querySelector("[data-server-card]"),
   serverIconImage: document.querySelector("[data-server-icon-image]"),
-  serverIconFallback: document.querySelector("[data-server-icon-fallback]"),
 };
 
 const params = new URLSearchParams(window.location.search);
@@ -36,9 +36,7 @@ async function boot() {
   });
   elements.serverIconImage?.addEventListener("error", () => {
     elements.serverIconImage.hidden = true;
-    if (elements.serverIconFallback) {
-      elements.serverIconFallback.hidden = false;
-    }
+    delete elements.serverCard?.dataset.hasIcon;
   });
 
   if (oauthError) {
@@ -211,24 +209,19 @@ function renderServer(guild) {
   if (elements.serverName) {
     elements.serverName.textContent = name;
   }
-  if (elements.serverIconFallback) {
-    elements.serverIconFallback.textContent = serverInitial(name);
-    elements.serverIconFallback.hidden = Boolean(iconUrl);
-  }
   if (elements.serverIconImage) {
     if (iconUrl) {
       elements.serverIconImage.src = iconUrl;
       elements.serverIconImage.hidden = false;
+      if (elements.serverCard) {
+        elements.serverCard.dataset.hasIcon = "true";
+      }
     } else {
       elements.serverIconImage.removeAttribute("src");
       elements.serverIconImage.hidden = true;
+      delete elements.serverCard?.dataset.hasIcon;
     }
   }
-}
-
-function serverInitial(name) {
-  const normalized = String(name || "?").trim();
-  return Array.from(normalized)[0] || "?";
 }
 
 function showAlreadyVerified() {
