@@ -13,8 +13,8 @@
     <meta property="og:description" content="Discordアカウントと端末情報を確認してサーバー認証を完了します。" />
     <meta name="twitter:card" content="summary" />
     <title>Discat Guard Certification</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-discord-return-1" />
-    <script src="./app.js?v=20260513-discord-return-1" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=20260515-hold-1" />
+    <script src="./app.js?v=20260515-hold-1" defer></script>
   </head>
   <body>
     <main class="verify-shell" aria-live="polite">
@@ -45,11 +45,13 @@
         </div>
 
         <button class="verify-button" type="button" data-verify-button>
+          <span class="verify-button__progress" aria-hidden="true"></span>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M20 6 9 17l-5-5" />
           </svg>
-          <span data-button-label>認証する</span>
+          <span data-button-label>2秒長押しで認証</span>
         </button>
+        <p class="hold-hint">ボタンを2秒押し続けるとDiscord認証へ進みます。</p>
 
         <div class="return-actions" data-return-actions hidden>
           <a class="return-button return-button--app" href="#" data-return-app-link>

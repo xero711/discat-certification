@@ -6,6 +6,8 @@ const DISCORD_AUTHORIZE_URL = "https://discord.com/oauth2/authorize";
 const API_BASE_STORAGE_KEY = "discat_guard_certification_api_base";
 const PRODUCTION_ORIGIN = "https://xero-x.me";
 const DISCORD_SNOWFLAKE_PATTERN = /^\d+$/;
+const VERIFY_HOLD_DURATION_MS = 2000;
+const DEFAULT_VERIFY_BUTTON_LABEL = "2秒長押しで認証";
 
 const elements = {
   statusLabel: document.querySelector("[data-status-label]"),
@@ -32,13 +34,20 @@ const guildId = String(params.get("guild_id") ?? oauthState.guildId ?? "").trim(
 const apiBase = resolveApiBase();
 let discordReturnTarget = buildDiscordReturnTarget(guildId);
 let buttonAction = startDiscordOAuth;
+const holdState = {
+  active: false,
+  completed: false,
+  startedAt: 0,
+  pointerId: null,
+  timerId: 0,
+  frameId: 0,
+  baseLabel: DEFAULT_VERIFY_BUTTON_LABEL,
+};
 
 void boot();
 
 async function boot() {
-  elements.button?.addEventListener("click", () => {
-    void buttonAction();
-  });
+  initializeVerifyHoldButton();
   elements.serverIconImage?.addEventListener("error", () => {
     elements.serverIconImage.hidden = true;
     delete elements.serverCard?.dataset.hasIcon;
@@ -102,6 +111,161 @@ async function boot() {
   }
 }
 
+function initializeVerifyHoldButton() {
+  const button = elements.button;
+  if (!button) {
+    return;
+  }
+  button.style.setProperty("--hold-progress", "0");
+  button.addEventListener("pointerdown", beginVerifyHold);
+  button.addEventListener("pointerup", cancelVerifyHold);
+  button.addEventListener("pointercancel", cancelVerifyHold);
+  button.addEventListener("pointerleave", cancelVerifyHold);
+  button.addEventListener("lostpointercapture", cancelVerifyHold);
+  button.addEventListener("keydown", handleVerifyHoldKeyDown);
+  button.addEventListener("keyup", handleVerifyHoldKeyUp);
+  button.addEventListener("blur", cancelVerifyHold);
+  button.addEventListener("contextmenu", (event) => {
+    if (holdState.active) {
+      event.preventDefault();
+    }
+  });
+}
+
+function beginVerifyHold(event) {
+  const button = elements.button;
+  if (!button || button.disabled || holdState.active || holdState.completed) {
+    return;
+  }
+  const isPointerEvent = typeof PointerEvent !== "undefined" && event instanceof PointerEvent;
+  if (isPointerEvent && event.button !== 0) {
+    return;
+  }
+  event.preventDefault();
+  holdState.active = true;
+  holdState.completed = false;
+  holdState.startedAt = performance.now();
+  holdState.baseLabel = elements.buttonLabel?.textContent || DEFAULT_VERIFY_BUTTON_LABEL;
+  holdState.pointerId = isPointerEvent ? event.pointerId : null;
+  if (holdState.pointerId !== null && typeof button.setPointerCapture === "function") {
+    try {
+      button.setPointerCapture(holdState.pointerId);
+    } catch {
+      // Pointer capture is a nicety, not a requirement.
+    }
+  }
+  button.classList.add("is-holding");
+  button.classList.remove("is-complete");
+  updateVerifyHoldProgress(0);
+  holdState.timerId = window.setTimeout(completeVerifyHold, VERIFY_HOLD_DURATION_MS);
+  holdState.frameId = window.requestAnimationFrame(updateVerifyHoldFrame);
+}
+
+function handleVerifyHoldKeyDown(event) {
+  if (![" ", "Enter"].includes(event.key) || event.repeat) {
+    return;
+  }
+  beginVerifyHold(event);
+}
+
+function handleVerifyHoldKeyUp(event) {
+  if (![" ", "Enter"].includes(event.key)) {
+    return;
+  }
+  cancelVerifyHold();
+}
+
+function updateVerifyHoldFrame(now) {
+  if (!holdState.active) {
+    return;
+  }
+  const elapsed = Math.max(0, now - holdState.startedAt);
+  updateVerifyHoldProgress(Math.min(1, elapsed / VERIFY_HOLD_DURATION_MS));
+  holdState.frameId = window.requestAnimationFrame(updateVerifyHoldFrame);
+}
+
+function updateVerifyHoldProgress(progress) {
+  elements.button?.style.setProperty("--hold-progress", progress.toFixed(3));
+  if (!elements.buttonLabel) {
+    return;
+  }
+  if (progress >= 1) {
+    elements.buttonLabel.textContent = "認証へ進みます";
+    return;
+  }
+  const remaining = Math.max(1, Math.ceil((VERIFY_HOLD_DURATION_MS * (1 - progress)) / 1000));
+  elements.buttonLabel.textContent = `そのまま長押し ${remaining}秒`;
+}
+
+function completeVerifyHold() {
+  if (!holdState.active) {
+    return;
+  }
+  clearVerifyHoldTimers();
+  releaseVerifyPointerCapture();
+  holdState.active = false;
+  holdState.completed = true;
+  elements.button?.classList.remove("is-holding");
+  elements.button?.classList.add("is-complete");
+  elements.button?.style.setProperty("--hold-progress", "1");
+  if (elements.button) {
+    elements.button.disabled = true;
+  }
+  if (elements.buttonLabel) {
+    elements.buttonLabel.textContent = "認証へ進みます";
+  }
+  void Promise.resolve(buttonAction()).catch((error) => {
+    setState({
+      status: "認証失敗",
+      title: "認証できませんでした",
+      message: connectionErrorMessage(error),
+      tone: "error",
+      disabled: false,
+      button: "認証する",
+    });
+  });
+}
+
+function cancelVerifyHold() {
+  if (!holdState.active) {
+    return;
+  }
+  clearVerifyHoldTimers();
+  releaseVerifyPointerCapture();
+  holdState.active = false;
+  elements.button?.classList.remove("is-holding");
+  elements.button?.style.setProperty("--hold-progress", "0");
+  if (elements.buttonLabel) {
+    elements.buttonLabel.textContent = holdState.baseLabel || DEFAULT_VERIFY_BUTTON_LABEL;
+  }
+}
+
+function resetVerifyHoldButton() {
+  cancelVerifyHold();
+  holdState.completed = false;
+  elements.button?.classList.remove("is-holding", "is-complete");
+  elements.button?.style.setProperty("--hold-progress", "0");
+}
+
+function clearVerifyHoldTimers() {
+  window.clearTimeout(holdState.timerId);
+  window.cancelAnimationFrame(holdState.frameId);
+  holdState.timerId = 0;
+  holdState.frameId = 0;
+}
+
+function releaseVerifyPointerCapture() {
+  const button = elements.button;
+  if (button && holdState.pointerId !== null && typeof button.releasePointerCapture === "function") {
+    try {
+      button.releasePointerCapture(holdState.pointerId);
+    } catch {
+      // The pointer may already have been released.
+    }
+  }
+  holdState.pointerId = null;
+}
+
 function startDiscordOAuth() {
   if ((!token && !guildId) || !apiBase) {
     return;
@@ -150,7 +314,7 @@ async function completeOAuthVerification() {
       throw new Error(verificationErrorMessage(response.status, payload));
     }
 
-    if (payload.already_verified) {
+    if (isAlreadyVerifiedCompletion(payload)) {
       window.history.replaceState({}, "", currentRedirectUri());
       showAlreadyVerified(payload);
       return;
@@ -161,7 +325,7 @@ async function completeOAuthVerification() {
     window.history.replaceState({}, "", currentRedirectUri());
     setState({
       status: duplicate ? "重複検知" : "認証完了",
-      title: duplicate ? "認証を記録しました" : "認証が完了しました",
+      title: duplicate ? "認証を記録しました" : "認証完了しました。",
       message: "",
       tone: duplicate ? "warning" : "success",
       disabled: true,
@@ -300,6 +464,17 @@ function showAlreadyVerified(payload = {}) {
   showReturnActions();
 }
 
+function isAlreadyVerifiedCompletion(payload = {}) {
+  if (payload?.was_already_verified === true) {
+    return true;
+  }
+  if (payload?.verification_completed === true) {
+    return false;
+  }
+  const hasCompletionRecord = payload?.record && typeof payload.record === "object";
+  return payload?.already_verified === true && !hasCompletionRecord;
+}
+
 function currentRedirectUri() {
   return `${window.location.origin}${window.location.pathname}`;
 }
@@ -424,6 +599,7 @@ function connectionErrorMessage(error) {
 
 function setState({ status, title, message, tone = "", disabled = false, button = "認証する" }) {
   hideReturnActions();
+  resetVerifyHoldButton();
   if (elements.statusLabel) {
     elements.statusLabel.textContent = status;
   }
@@ -444,6 +620,6 @@ function setState({ status, title, message, tone = "", disabled = false, button 
     elements.button.disabled = disabled;
   }
   if (elements.buttonLabel) {
-    elements.buttonLabel.textContent = button;
+    elements.buttonLabel.textContent = !disabled && button === "認証する" ? DEFAULT_VERIFY_BUTTON_LABEL : button;
   }
 }
