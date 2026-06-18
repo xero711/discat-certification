@@ -33,6 +33,7 @@ const token = String(params.get("token") ?? oauthState.token ?? "").trim();
 const guildId = String(params.get("guild_id") ?? oauthState.guildId ?? "").trim();
 const apiBase = resolveApiBase();
 let discordReturnTarget = buildDiscordReturnTarget(guildId);
+let restrictedGuildCheckEnabled = true;
 let buttonAction = startDiscordOAuth;
 const holdState = {
   active: false,
@@ -277,11 +278,12 @@ function startDiscordOAuth() {
   }
   const authUrl = new URL(DISCORD_AUTHORIZE_URL);
   const state = token ? `token:${token}` : `guild:${guildId}`;
+  const scope = restrictedGuildCheckEnabled ? "identify guilds" : "identify";
   authUrl.search = new URLSearchParams({
     client_id: DISCORD_CLIENT_ID,
     redirect_uri: currentRedirectUri(),
     response_type: "code",
-    scope: "identify",
+    scope,
     state,
   }).toString();
   window.location.href = authUrl.toString();
@@ -321,13 +323,15 @@ async function completeOAuthVerification() {
     }
 
     const duplicate = Boolean(payload.duplicate_detected);
+    const restrictedGuild = Boolean(payload.restricted_guild_detected);
+    const policyMatched = duplicate || restrictedGuild;
     rememberDiscordReturn(payload);
     window.history.replaceState({}, "", currentRedirectUri());
     setState({
-      status: duplicate ? "重複検知" : "認証完了",
-      title: duplicate ? "認証を記録しました" : "認証完了しました。",
+      status: policyMatched ? "要確認" : "認証完了",
+      title: policyMatched ? "認証を記録しました" : "認証完了しました。",
       message: "",
-      tone: duplicate ? "warning" : "success",
+      tone: policyMatched ? "warning" : "success",
       disabled: true,
       button: "完了",
     });
@@ -354,6 +358,7 @@ async function loadSessionContext() {
     throw new Error(verificationErrorMessage(response.status, payload));
   }
   rememberDiscordReturn(payload);
+  rememberVerificationPolicy(payload);
   renderServer(payload.guild);
   if (payload.already_verified) {
     showAlreadyVerified(payload);
@@ -372,6 +377,7 @@ async function loadGuildContext() {
     throw new Error(verificationErrorMessage(response.status, payload));
   }
   rememberDiscordReturn(payload);
+  rememberVerificationPolicy(payload);
   renderServer(payload.guild);
   return true;
 }
@@ -462,6 +468,12 @@ function showAlreadyVerified(payload = {}) {
     button: "完了",
   });
   showReturnActions();
+}
+
+function rememberVerificationPolicy(payload = {}) {
+  if (typeof payload?.restricted_guild_check_enabled === "boolean") {
+    restrictedGuildCheckEnabled = payload.restricted_guild_check_enabled;
+  }
 }
 
 function isAlreadyVerifiedCompletion(payload = {}) {
@@ -572,9 +584,20 @@ function verificationErrorMessage(status, payload) {
     discord_user_mismatch: "Discordで認証したアカウントが、認証ボタンを押したアカウントと一致しません。",
     discord_token_exchange_failed: "Discord OAuth2の認証コード確認に失敗しました。",
     discord_user_fetch_failed: "Discordアカウント情報を取得できませんでした。",
+    discord_guilds_fetch_failed: "Discordの参加サーバー情報を取得できませんでした。",
   };
   const detail = typeof payload?.message === "string" ? payload.message.trim() : "";
-  if (detail && ["discord_token_exchange_failed", "discord_user_fetch_failed"].includes(error)) {
+  if (
+    error === "discord_guilds_fetch_failed" &&
+    detail &&
+    /(401|403|unauthorized|forbidden|scope)/i.test(detail)
+  ) {
+    return "Discordの参加サーバー確認に必要な権限がありません。ページを再読み込みして、もう一度認証してください。";
+  }
+  if (
+    detail &&
+    ["discord_token_exchange_failed", "discord_user_fetch_failed", "discord_guilds_fetch_failed"].includes(error)
+  ) {
     return `${messages[error] ?? "Discord OAuth2の処理に失敗しました。"} ${detail}`;
   }
   if (messages[error]) {
